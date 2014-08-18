@@ -14,6 +14,8 @@
 #include <gtk/gtk.h>
 #include <gdk/gdkkeysyms.h>
 #include <gdk/gdkx.h>
+#include <gdk/gdkscreen.h>
+#include <cairo.h>
 
 #include <string>
 #include <iostream>
@@ -34,6 +36,7 @@ using namespace std;
 
 #include "gtkcompletionline.h"
 #include "prefs.h"
+#include "config.h"
 
 // defined in gtkcompletionline.cc
 int get_words(GtkCompletionLine *object, vector<string>& words);
@@ -41,8 +44,8 @@ string quote_string(const string& str);
 
 struct gigi
 {
-  GtkWidget *w1;
-  GtkWidget *w2;
+    GtkWidget *w1;
+    GtkWidget *w2;
 };
 
 /// BEGIN: TIMEOUT MANAGEMENT
@@ -53,91 +56,109 @@ static guint g_search_off_timeout_id = 0;
 
 static void remove_search_off_timeout()
 {
-  if (g_search_off_timeout_id) {
-    gtk_timeout_remove(g_search_off_timeout_id);
-    g_search_off_timeout_id = 0;
-  }
+    if (g_search_off_timeout_id)
+    {
+        gtk_timeout_remove(g_search_off_timeout_id);
+        g_search_off_timeout_id = 0;
+    }
 }
 
 static void add_search_off_timeout(guint32 timeout, struct gigi *g, GtkFunction func = 0)
 {
-  remove_search_off_timeout();
-  if (!func)
-    func = GtkFunction(search_off_timeout);
-  g_search_off_timeout_id = gtk_timeout_add(timeout, func, g);
+    remove_search_off_timeout();
+    if (!func)
+        func = GtkFunction(search_off_timeout);
+    g_search_off_timeout_id = gtk_timeout_add(timeout, func, g);
 }
 
 /// END: TIMEOUT MANAGEMENT
 
 GtkStyle* style_normal(GtkWidget *w)
 {
-  static GtkStyle *style;
+    static GtkStyle *style;
 
-  if (!style) {
-    style = gtk_style_copy(gtk_widget_get_style(w));
-    style->fg[GTK_STATE_NORMAL] = (GdkColor){0, 0x0000, 0x0000, 0x0000};
-    gtk_style_ref(style);
-  }
-  return style;
+    if (!style)
+    {
+        style = gtk_style_copy(gtk_widget_get_style(w));
+        style->fg[GTK_STATE_NORMAL] = (GdkColor)
+        {
+            0, 0x0000, 0x0000, 0x0000
+        };
+        gtk_style_ref(style);
+    }
+    return style;
 }
 
 GtkStyle* style_notfound(GtkWidget *w)
 {
-  static GtkStyle *style;
+    static GtkStyle *style;
 
-  if (!style) {
-    style = gtk_style_copy(gtk_widget_get_style(w));
-    style->fg[GTK_STATE_NORMAL] = (GdkColor){0, 0xFFFF, 0x0000, 0x0000};
-    gtk_style_ref(style);
-  }
-  return style;
+    if (!style)
+    {
+        style = gtk_style_copy(gtk_widget_get_style(w));
+        style->fg[GTK_STATE_NORMAL] = (GdkColor)
+        {
+            0, 0xFFFF, 0x0000, 0x0000
+        };
+        gtk_style_ref(style);
+    }
+    return style;
 }
 
 GtkStyle* style_notunique(GtkWidget *w)
 {
-  static GtkStyle *style;
+    static GtkStyle *style;
 
-  if (!style) {
-    style = gtk_style_copy(gtk_widget_get_style(w));
-    style->fg[GTK_STATE_NORMAL] = (GdkColor){0, 0x0000, 0x0000, 0xFFFF};
-    gtk_style_ref(style);
-  }
-  return style;
+    if (!style)
+    {
+        style = gtk_style_copy(gtk_widget_get_style(w));
+        style->fg[GTK_STATE_NORMAL] = (GdkColor)
+        {
+            0, 0x0000, 0x0000, 0xFFFF
+        };
+        gtk_style_ref(style);
+    }
+    return style;
 }
 
 GtkStyle* style_unique(GtkWidget *w)
 {
-  static GtkStyle *style;
+    static GtkStyle *style;
 
-  if (!style) {
-    style = gtk_style_copy(gtk_widget_get_style(w));
-    style->fg[GTK_STATE_NORMAL] = (GdkColor){0, 0x0000, 0xFFFF, 0x0000};
-    gtk_style_ref(style);
-  }
-  return style;
+    if (!style)
+    {
+        style = gtk_style_copy(gtk_widget_get_style(w));
+        style->fg[GTK_STATE_NORMAL] = (GdkColor)
+        {
+            0, 0x0000, 0xFFFF, 0x0000
+        };
+        gtk_style_ref(style);
+    }
+    return style;
 }
 
 static void
 run_with_system(const std::string& command, struct gigi* g)
 {
-  string cmd(command);
-  cmd += '&';
-  int ret = system(cmd.c_str());
+    string cmd(command);
+    cmd += '&';
+    int ret = system(cmd.c_str());
 #ifdef DEBUG
-  cerr << "System exit code: " << ret << endl;
+    cerr << "System exit code: " << ret << endl;
 #endif
-  if (ret != -1)
-    gtk_main_quit();
-  else {
-    string error("ERROR: ");
-    error += strerror(errno);
+    if (ret != -1)
+        gtk_main_quit();
+    else
+    {
+        string error("ERROR: ");
+        error += strerror(errno);
 #ifdef DEBUG
-    cerr << error << endl;
+        cerr << error << endl;
 #endif
-    gtk_label_set_text(GTK_LABEL(g->w1), error.c_str());
-    gtk_widget_set_style(g->w1, style_notfound(g->w1));
-    add_search_off_timeout(2000, g);
-  }
+        gtk_label_set_text(GTK_LABEL(g->w1), error.c_str());
+        gtk_widget_set_style(g->w1, style_notfound(g->w1));
+        add_search_off_timeout(2000, g);
+    }
 }
 
 #ifdef USE_SYSTEM
@@ -146,7 +167,7 @@ run_with_system(const std::string& command, struct gigi* g)
 static void
 run_the_command(const std::string& command, struct gigi* g)
 {
-  run_with_system(command, g);
+    run_with_system(command, g);
 }
 
 #else
@@ -157,377 +178,435 @@ run_the_command(const std::string& command, struct gigi* g)
 static void
 run_the_command(const std::string& command, struct gigi* g)
 {
-  string prog;
-  std::vector<char*> argv;
+    string prog;
+    std::vector<char*> argv;
 
-  string cmd = command + ' ';
-  istringstream iss(cmd);
+    string cmd = command + ' ';
+    istringstream iss(cmd);
 #ifdef DEBUG
-  cerr << cmd << endl;
+    cerr << cmd << endl;
 #endif
-  char what_quote = '"';
-  enum TYPE_CONTEXT {
-    CT_NORMAL = 0,
-    CT_QUOTE,
-    CT_ESCAPE
-  };
-  TYPE_CONTEXT context = CT_NORMAL;
-  TYPE_CONTEXT save_context = CT_NORMAL;
-  string tmp;
-  char c;
+    char what_quote = '"';
+    enum TYPE_CONTEXT
+    {
+        CT_NORMAL = 0,
+        CT_QUOTE,
+        CT_ESCAPE
+    };
+    TYPE_CONTEXT context = CT_NORMAL;
+    TYPE_CONTEXT save_context = CT_NORMAL;
+    string tmp;
+    char c;
 
-  while (!iss.eof()) {
-    c = (char)iss.get();
-    if (iss.eof()) {
-      break;
-    }
-
-    switch (c) {
-     case '\\':
-      if (context != CT_ESCAPE) {
-        save_context = context;
-        context = CT_ESCAPE;
-      } else {
-        goto ordinary;
-      }
-      break;
-
-     case '\'':
-     case '"':
-      if (context == CT_ESCAPE) {
-        goto ordinary;
-      } else {
-        if (context == CT_QUOTE) {
-          if (what_quote == c) {
-            context = CT_NORMAL;
-          } else {
-            goto ordinary;
-          }
-        } else {
-          context = CT_QUOTE;
-          what_quote = c;
+    while (!iss.eof())
+    {
+        c = (char)iss.get();
+        if (iss.eof())
+        {
+            break;
         }
-      }
-      break;
 
-     case ' ':
-      if (context == CT_ESCAPE || context == CT_QUOTE) {
-        goto ordinary;
-      } else if (!tmp.empty()) {
-        if (prog.empty()) {
-          prog = tmp;
+        switch (c)
+        {
+            case '\\':
+                if (context != CT_ESCAPE)
+                {
+                    save_context = context;
+                    context = CT_ESCAPE;
+                }
+                else
+                {
+                    goto ordinary;
+                }
+                break;
+
+            case '\'':
+            case '"':
+                if (context == CT_ESCAPE)
+                {
+                    goto ordinary;
+                }
+                else
+                {
+                    if (context == CT_QUOTE)
+                    {
+                        if (what_quote == c)
+                        {
+                            context = CT_NORMAL;
+                        }
+                        else
+                        {
+                            goto ordinary;
+                        }
+                    }
+                    else
+                    {
+                        context = CT_QUOTE;
+                        what_quote = c;
+                    }
+                }
+                break;
+
+            case ' ':
+                if (context == CT_ESCAPE || context == CT_QUOTE)
+                {
+                    goto ordinary;
+                }
+                else if (!tmp.empty())
+                {
+                    if (prog.empty())
+                    {
+                        prog = tmp;
+                    }
+                    char *p = (char*)malloc(tmp.length() + 1);
+                    memcpy(p, tmp.c_str(), tmp.length() + 1);
+                    argv.push_back(p);
+                    tmp.clear();
+                }
+                break;
+
+ordinary:
+            default:
+                if (context == CT_ESCAPE)
+                {
+                    context = save_context;
+                    tmp += c;
+                }
+                else if (context == CT_QUOTE)
+                {
+                    tmp += c;
+                }
+                else if (c != ' ')
+                {
+                    tmp += c;
+                }
         }
-        char *p = (char*)malloc(tmp.length() + 1);
-        memcpy(p, tmp.c_str(), tmp.length() + 1);
-        argv.push_back(p);
-        tmp.clear();
-      }
-      break;
-
-     ordinary:
-     default:
-      if (context == CT_ESCAPE) {
-        context = save_context;
-        tmp += c;
-      } else if (context == CT_QUOTE) {
-        tmp += c;
-      } else if (c != ' ') {
-        tmp += c;
-      }
     }
-  }
-  argv.push_back(NULL);
+    argv.push_back(NULL);
 
 #ifdef DEBUG
-  for (vector<char*>::iterator i = argv.begin(); i != argv.end(); ++i) {
-    if (*i) {
-      cerr << "'" << *i << "'" << endl;
+    for (vector<char*>::iterator i = argv.begin(); i != argv.end(); ++i)
+    {
+        if (*i)
+        {
+            cerr << "'" << *i << "'" << endl;
+        }
     }
-  }
 #endif
 
-  execvp(prog.c_str(), (char**)&(*argv.begin()));
-  string error("ERROR: ");
-  error += strerror(errno);
+    execvp(prog.c_str(), (char**)&(*argv.begin()));
+    string error("ERROR: ");
+    error += strerror(errno);
 #ifdef DEBUG
-  cerr << error << endl;
+    cerr << error << endl;
 #endif
 
-  gtk_label_set_text(GTK_LABEL(g->w1), error.c_str());
-  gtk_widget_set_style(g->w1, style_notfound(g->w1));
-  add_search_off_timeout(2000, g);
+    gtk_label_set_text(GTK_LABEL(g->w1), error.c_str());
+    gtk_widget_set_style(g->w1, style_notfound(g->w1));
+    add_search_off_timeout(2000, g);
 }
 #endif
 
 static void
 on_ext_handler(GtkCompletionLine *cl, const char* ext, struct gigi* g)
 {
-  string cmd;
-  if (ext && configuration.get_ext_handler(ext, cmd)) {
-    string str("Handler: ");
-    size_t pos = cmd.find_first_of(" \t");
-    if (pos == string::npos)
-      str += cmd;
+    string cmd;
+    if (ext && configuration.get_ext_handler(ext, cmd))
+    {
+        string str("Handler: ");
+        size_t pos = cmd.find_first_of(" \t");
+        if (pos == string::npos)
+            str += cmd;
+        else
+            str += cmd.substr(0, pos);
+        gtk_label_set_text(GTK_LABEL(g->w2), str.c_str());
+        gtk_widget_show(g->w2);
+        // gtk_timeout_add(1000, GtkFunction(search_off_timeout), g);
+    }
     else
-      str += cmd.substr(0, pos);
-    gtk_label_set_text(GTK_LABEL(g->w2), str.c_str());
-    gtk_widget_show(g->w2);
-    // gtk_timeout_add(1000, GtkFunction(search_off_timeout), g);
-  } else {
-    search_off_timeout(g);
-  }
+    {
+        search_off_timeout(g);
+    }
 }
 
 static void
 on_compline_runwithterm(GtkCompletionLine *cl, struct gigi* g)
 {
-  string command(g_locale_from_utf8 (gtk_entry_get_text(GTK_ENTRY(cl)),
-                     -1,
-                     NULL,
-                     NULL,
-                     NULL));
-  string tmp;
-  string term;
+    string command(g_locale_from_utf8 (gtk_entry_get_text(GTK_ENTRY(cl)),
+                                       -1,
+                                       NULL,
+                                       NULL,
+                                       NULL));
+    string tmp;
+    string term;
 
-  string::size_type i;
-  i = command.find_first_not_of(" \t");
+    string::size_type i;
+    i = command.find_first_not_of(" \t");
 
-  if (i != string::npos) {
-    if (!configuration.get_string("TermExec", term)) {
-      term = "xterm -e";
+    if (i != string::npos)
+    {
+        if (!configuration.get_string("TermExec", term))
+        {
+            term = "xterm -e";
+        }
+        tmp = term;
+        tmp += " ";
+        tmp += command;
     }
-    tmp = term;
-    tmp += " ";
-    tmp += command;
-  } else {
-    if (!configuration.get_string("Terminal", term)) {
-      tmp = "xterm";
-    } else {
-      tmp = term;
+    else
+    {
+        if (!configuration.get_string("Terminal", term))
+        {
+            tmp = "xterm";
+        }
+        else
+        {
+            tmp = term;
+        }
     }
-  }
 
 #ifdef DEBUG
-  cerr << tmp << endl;
+    cerr << tmp << endl;
 #endif
 
-  cl->hist->append(command.c_str());
-  cl->hist->sync_the_file();
-  run_with_system(tmp.c_str(), g);
+    cl->hist->append(command.c_str());
+    cl->hist->sync_the_file();
+    run_with_system(tmp.c_str(), g);
 }
 
 static gint
 search_off_timeout(struct gigi *g)
 {
-  gtk_label_set_text(GTK_LABEL(g->w1), "Run program:");
-  gtk_widget_set_style(g->w1, style_normal(g->w1));
-  gtk_widget_hide(g->w2);
-  return FALSE;
+    // gtk_label_set_text(GTK_LABEL(g->w1), "Run program:");
+    gtk_label_set_text(GTK_LABEL(g->w1), "");
+    gtk_widget_set_style(g->w1, style_normal(g->w1));
+    gtk_widget_hide(g->w2);
+    return FALSE;
 }
 
 static void
 on_compline_unique(GtkCompletionLine *cl, struct gigi *g)
 {
-  gtk_label_set_text(GTK_LABEL(g->w1), "unique");
-  gtk_widget_set_style(g->w1, style_unique(g->w1));
-  add_search_off_timeout(1000, g);
+    gtk_label_set_text(GTK_LABEL(g->w1), "unique");
+    gtk_widget_set_style(g->w1, style_unique(g->w1));
+    add_search_off_timeout(1000, g);
 }
 
 static void
 on_compline_notunique(GtkCompletionLine *cl, struct gigi *g)
 {
-  gtk_label_set_text(GTK_LABEL(g->w1), "not unique");
-  gtk_widget_set_style(g->w1, style_notunique(g->w1));
-  add_search_off_timeout(1000, g);
+    gtk_label_set_text(GTK_LABEL(g->w1), "not unique");
+    gtk_widget_set_style(g->w1, style_notunique(g->w1));
+    add_search_off_timeout(1000, g);
 }
 
 static void
 on_compline_incomplete(GtkCompletionLine *cl, struct gigi *g)
 {
-  gtk_label_set_text(GTK_LABEL(g->w1), "not found");
-  gtk_widget_set_style(g->w1, style_notfound(g->w1));
-  add_search_off_timeout(1000, g);
+    gtk_label_set_text(GTK_LABEL(g->w1), "not found");
+    gtk_widget_set_style(g->w1, style_notfound(g->w1));
+    add_search_off_timeout(1000, g);
 }
 
 static void
 on_search_mode(GtkCompletionLine *cl, struct gigi *g)
 {
-  if (cl->hist_search_mode != GCL_SEARCH_OFF) {
-    gtk_widget_show(g->w2);
-    gtk_label_set_text(GTK_LABEL(g->w1), "Search:");
-    gtk_label_set_text(GTK_LABEL(g->w2), cl->hist_word->c_str());
-  } else {
-    gtk_widget_hide(g->w2);
-    gtk_label_set_text(GTK_LABEL(g->w1), "Search OFF");
-    add_search_off_timeout(1000, g);
-  }
+    if (cl->hist_search_mode != GCL_SEARCH_OFF)
+    {
+        gtk_widget_show(g->w2);
+        gtk_label_set_text(GTK_LABEL(g->w1), "Search:");
+        gtk_label_set_text(GTK_LABEL(g->w2), cl->hist_word->c_str());
+    }
+    else
+    {
+        gtk_widget_hide(g->w2);
+        gtk_label_set_text(GTK_LABEL(g->w1), "Search OFF");
+        add_search_off_timeout(1000, g);
+    }
 }
 
 static void
 on_search_letter(GtkCompletionLine *cl, GtkWidget *label)
 {
-  gtk_label_set_text(GTK_LABEL(label), cl->hist_word->c_str());
+    gtk_label_set_text(GTK_LABEL(label), cl->hist_word->c_str());
 }
 
 static gint
 search_fail_timeout(struct gigi *g)
 {
-  gtk_label_set_text(GTK_LABEL(g->w1), "Search:");
-  gtk_widget_set_style(g->w2, style_notunique(g->w2));
+    gtk_label_set_text(GTK_LABEL(g->w1), "Search:");
+    gtk_widget_set_style(g->w2, style_notunique(g->w2));
 
-  return FALSE;
+    return FALSE;
 }
 
 static void
 on_search_not_found(GtkCompletionLine *cl, struct gigi *g)
 {
-  gtk_label_set_text(GTK_LABEL(g->w1), "Not Found!");
-  gtk_widget_set_style(g->w2, style_notfound(g->w2));
-  add_search_off_timeout(1000, g, GtkFunction(search_fail_timeout));
+    gtk_label_set_text(GTK_LABEL(g->w1), "Not Found!");
+    gtk_widget_set_style(g->w2, style_notfound(g->w2));
+    add_search_off_timeout(1000, g, GtkFunction(search_fail_timeout));
 }
 
 static bool
 url_check(GtkCompletionLine *cl, struct gigi *g)
 {
-  string text(g_locale_from_utf8 (gtk_entry_get_text(GTK_ENTRY(cl)),
-                  -1,
-                  NULL,
-                  NULL,
-                  NULL));
+    string text(g_locale_from_utf8 (gtk_entry_get_text(GTK_ENTRY(cl)),
+                                    -1,
+                                    NULL,
+                                    NULL,
+                                    NULL));
 
-  string::size_type i;
-  string::size_type sp;
+    string::size_type i;
+    string::size_type sp;
 
-  sp = text.find_first_not_of(" \t");
-  if (sp == string::npos) return true;
-  text = text.substr(sp);
+    sp = text.find_first_not_of(" \t");
+    if (sp == string::npos) return true;
+    text = text.substr(sp);
 
-  sp = text.find_first_of(" \t");
-  i = text.find(":");
+    sp = text.find_first_of(" \t");
+    i = text.find(":");
 
-  if (i != string::npos && i < sp) {
-    // URL entered...
-    string url(text.substr(i + 1));
-    string url_type(text.substr(0, i));
-    string url_handler;
+    if (i != string::npos && i < sp)
+    {
+        // URL entered...
+        string url(text.substr(i + 1));
+        string url_type(text.substr(0, i));
+        string url_handler;
 
-    if (configuration.get_string(string("URL_") + url_type, url_handler)) {
-      string::size_type j = 0;
+        if (configuration.get_string(string("URL_") + url_type, url_handler))
+        {
+            string::size_type j = 0;
 
-      do {
-        j = url_handler.find("%s", j);
-        if (j != string::npos) {
-          url_handler.replace(j, 2, url);
+            do
+            {
+                j = url_handler.find("%s", j);
+                if (j != string::npos)
+                {
+                    url_handler.replace(j, 2, url);
+                }
+            }
+            while (j != string::npos);
+
+            j = 0;
+            do
+            {
+                j = url_handler.find("%u", j);
+                if (j != string::npos)
+                {
+                    url_handler.replace(j, 2, text);
+                }
+            }
+            while (j != string::npos);
+
+            cl->hist->append(text.c_str());
+            cl->hist->sync_the_file();
+            run_the_command(url_handler.c_str(), g);
+            return true;
         }
-      } while (j != string::npos);
-
-      j = 0;
-      do {
-        j = url_handler.find("%u", j);
-        if (j != string::npos) {
-          url_handler.replace(j, 2, text);
+        else
+        {
+            gtk_label_set_text(GTK_LABEL(g->w1),
+                               (string("No URL handler for [") +
+                                url_type + "]").c_str());
+            gtk_widget_set_style(g->w1, style_notfound(g->w1));
+            add_search_off_timeout(1000, g);
+            return true;
         }
-      } while (j != string::npos);
-
-      cl->hist->append(text.c_str());
-      cl->hist->sync_the_file();
-      run_the_command(url_handler.c_str(), g);
-      return true;
-    } else {
-      gtk_label_set_text(GTK_LABEL(g->w1),
-                         (string("No URL handler for [") +
-                          url_type + "]").c_str());
-      gtk_widget_set_style(g->w1, style_notfound(g->w1));
-      add_search_off_timeout(1000, g);
-      return true;
     }
-  }
 
-  return false;
+    return false;
 }
 
 static bool
 ext_check(GtkCompletionLine *cl, struct gigi *g)
 {
-  vector<string> words;
-  get_words(cl, words);
-  vector<string>::const_iterator
+    vector<string> words;
+    get_words(cl, words);
+    vector<string>::const_iterator
     i     = words.begin(),
     i_end = words.end();
 
-  while (i != i_end) {
-    const string& w = quote_string(*i++);
-    if (w[0] == '/') {
-      // absolute path, check for extension
-      size_t pos = w.rfind('.');
-      if (pos != string::npos) {
-        // we have extension
-        string ext = w.substr(pos + 1);
-        string ext_handler;
-        if (configuration.get_ext_handler(ext, ext_handler)) {
-          // we have the handler
-          pos = ext_handler.find("%s");
-          if (pos != string::npos)
-            ext_handler.replace(pos, 2, w);
-          cl->hist->append(w.c_str());
-          cl->hist->sync_the_file();
-          run_the_command(ext_handler.c_str(), g);
-          return true;
+    while (i != i_end)
+    {
+        const string& w = quote_string(*i++);
+        if (w[0] == '/')
+        {
+            // absolute path, check for extension
+            size_t pos = w.rfind('.');
+            if (pos != string::npos)
+            {
+                // we have extension
+                string ext = w.substr(pos + 1);
+                string ext_handler;
+                if (configuration.get_ext_handler(ext, ext_handler))
+                {
+                    // we have the handler
+                    pos = ext_handler.find("%s");
+                    if (pos != string::npos)
+                        ext_handler.replace(pos, 2, w);
+                    cl->hist->append(w.c_str());
+                    cl->hist->sync_the_file();
+                    run_the_command(ext_handler.c_str(), g);
+                    return true;
+                }
+            }
         }
-      }
+        // FIXME: for now we check only one entry
+        break;
     }
-    // FIXME: for now we check only one entry
-    break;
-  }
 
-  return false;
+    return false;
 }
 
 static void
 on_compline_activated(GtkCompletionLine *cl, struct gigi *g)
 {
-  if (url_check(cl, g))
-    return;
-  if (ext_check(cl, g))
-    return;
-
-  string command = g_locale_from_utf8 (gtk_entry_get_text(GTK_ENTRY(cl)),
-                       -1,
-                       NULL,
-                       NULL,
-                       NULL);
-
-  string::size_type i;
-  i = command.find_first_not_of(" \t");
-
-  if (i != string::npos) {
-    string::size_type j = command.find_first_of(" \t", i);
-    string progname = command.substr(i, j - i);
-    list<string> term_progs;
-    if (configuration.get_string_list("AlwaysInTerm", term_progs)) {
-#ifdef DEBUG
-      cerr << "---" << std::endl;
-      std::copy(term_progs.begin(), term_progs.end(),
-                std::ostream_iterator<string>(cerr, "\n"));
-      cerr << "---" << std::endl;
-#endif
-      list<string>::const_iterator w =
-        std::find(term_progs.begin(), term_progs.end(), progname);
-      if (w != term_progs.end()) {
-        on_compline_runwithterm(cl, g);
+    if (url_check(cl, g))
         return;
-      }
+    if (ext_check(cl, g))
+        return;
+
+    string command = g_locale_from_utf8 (gtk_entry_get_text(GTK_ENTRY(cl)),
+                                         -1,
+                                         NULL,
+                                         NULL,
+                                         NULL);
+
+    string::size_type i;
+    i = command.find_first_not_of(" \t");
+
+    if (i != string::npos)
+    {
+        string::size_type j = command.find_first_of(" \t", i);
+        string progname = command.substr(i, j - i);
+        list<string> term_progs;
+        if (configuration.get_string_list("AlwaysInTerm", term_progs))
+        {
+#ifdef DEBUG
+            cerr << "---" << std::endl;
+            std::copy(term_progs.begin(), term_progs.end(),
+                      std::ostream_iterator<string>(cerr, "\n"));
+            cerr << "---" << std::endl;
+#endif
+            list<string>::const_iterator w =
+                std::find(term_progs.begin(), term_progs.end(), progname);
+            if (w != term_progs.end())
+            {
+                on_compline_runwithterm(cl, g);
+                return;
+            }
+        }
+        cl->hist->append(command.c_str());
+        cl->hist->sync_the_file();
+        run_the_command(command, g);
     }
-    cl->hist->append(command.c_str());
-    cl->hist->sync_the_file();
-    run_the_command(command, g);
-  }
 }
 
 /**
- Check if screen contain ponter and return coords
- Taked from Xfce: libxfcegui4
- */
+  Check if screen contain ponter and return coords
+  Taked from Xfce: libxfcegui4
+  */
 static gboolean
 screen_contains_pointer (GdkScreen *screen,
                          int       *x,
@@ -556,12 +635,12 @@ screen_contains_pointer (GdkScreen *screen,
 }
 
 /**
- Found monitor that contain mouse pointer
- Taked from Xfce: libxfcegui4
- */
+  Found monitor that contain mouse pointer
+  Taked from Xfce: libxfcegui4
+  */
 static GdkScreen*
 gmrun_gdk_display_locate_monitor_with_pointer (GdkDisplay *display,
-                                               gint       *monitor_return)
+        gint       *monitor_return)
 {
     int n_screens, i;
 
@@ -592,9 +671,9 @@ gmrun_gdk_display_locate_monitor_with_pointer (GdkDisplay *display,
 }
 
 /**
- Center window on given monitor
+  Center window on given monitor
   Taked from Xfce: libxfcegui4
- */
+  */
 static void
 //gmrun_gtk_window_center_on_monitor (GtkWindow *window,
 gmrun_gtk_window_place_on_monitor (GtkWindow *window,
@@ -658,11 +737,11 @@ gmrun_gtk_window_place_on_monitor (GtkWindow *window,
 
 static void
 gmrun_gtk_window_place_at(GtkWindow *window,
-                        int request_x,
-                        int request_y,
-                        int centered_width = 0,
-                        int centered_height = 0,
-                        int on_active = 0)
+                          int request_x,
+                          int request_y,
+                          int centered_width = 0,
+                          int centered_height = 0,
+                          int on_active = 0)
 {
     GdkScreen *screen = NULL;
     gint       monitor = 0;
@@ -695,155 +774,222 @@ gmrun_gtk_window_place_at(GtkWindow *window,
                                       request_y);
 }
 
+gboolean supports_alpha = FALSE;
+static void screen_changed(GtkWidget *widget, GdkScreen *old_screen, gpointer userdata)
+{
+    /* To check if the display supports alpha channels, get the colormap */
+    GdkScreen *screen = gtk_widget_get_screen(widget);
+    GdkColormap *colormap = gdk_screen_get_rgba_colormap(screen);
+
+    if (!colormap)
+    {
+        // printf("Your screen does not support alpha channels!\n");
+        colormap = gdk_screen_get_rgb_colormap(screen);
+        supports_alpha = FALSE;
+    }
+    else
+    {
+        // printf("Your screen supports alpha channels!\n");
+        supports_alpha = TRUE;
+    }
+
+    gtk_widget_set_colormap(widget, colormap);
+}
+
+static gboolean expose(GtkWidget *widget, GdkEventExpose *event, gpointer userdata)
+{
+    cairo_t *cr = gdk_cairo_create(widget->window);
+
+    if (supports_alpha)
+        cairo_set_source_rgba (cr, 1.0, 1.0, 1.0, 0.0); /* transparent */
+    else
+        cairo_set_source_rgb (cr, 1.0, 1.0, 1.0); /* opaque white */
+
+    /* draw the background */
+    cairo_set_operator (cr, CAIRO_OPERATOR_SOURCE);
+    cairo_paint (cr);
+
+    cairo_destroy(cr);
+
+    return FALSE;
+}
+
 int main(int argc, char **argv)
 {
-  GtkWidget *dialog;
-  GtkWidget *compline;
-  GtkWidget *label_search;
-  struct gigi g;
+    GtkWidget *dialog;
+    GtkWidget *compline;
+    GtkWidget *label_search;
+    struct gigi g;
 
 #ifdef MTRACE
-  mtrace();
+    mtrace();
 #endif
 
-  gtk_init(&argc, &argv);
+    gtk_init(&argc, &argv);
 
-  dialog = gtk_dialog_new();
-  gtk_widget_realize(dialog);
-  gdk_window_set_decorations(dialog->window, GDK_DECOR_BORDER);
-  gtk_widget_set_name(dialog, "Msh_Run_Window");
-  gtk_window_set_title(GTK_WINDOW(dialog), "Execute program feat. completion");
-  gtk_window_set_policy(GTK_WINDOW(dialog), FALSE, FALSE, TRUE);
-  // gtk_window_set_position(GTK_WINDOW(win), GTK_WIN_POS_CENTER);
-  gtk_container_set_border_width(GTK_CONTAINER(dialog), 4);
-  gtk_signal_connect(GTK_OBJECT(dialog), "destroy",
-                     GTK_SIGNAL_FUNC(gtk_main_quit), NULL);
+    dialog = gtk_dialog_new();
+    // gtk_widget_realize(dialog);
+    // gdk_window_set_decorations(dialog->window, GDK_DECOR_BORDER);
+    gtk_widget_set_name(dialog, "Msh_Run_Window");
+    gtk_window_set_decorated(GTK_WINDOW(dialog), FALSE);
+    gtk_window_set_title(GTK_WINDOW(dialog), "Execute program feat. completion");
+    // gtk_window_set_policy(GTK_WINDOW(dialog), FALSE, FALSE, TRUE);
+    // gtk_window_set_position(GTK_WINDOW(win), GTK_WIN_POS_CENTER);
+    // gtk_container_set_border_width(GTK_CONTAINER(dialog), 4);
+    gtk_widget_set_app_paintable(dialog, TRUE);
+    g_signal_connect(G_OBJECT(dialog), "expose-event", G_CALLBACK(expose), NULL);
+    g_signal_connect(G_OBJECT(dialog), "screen-changed", G_CALLBACK(screen_changed), NULL);
+	screen_changed(dialog, NULL, NULL);
 
-  GtkWidget *hhbox = gtk_hbox_new(FALSE, 2);
-  gtk_widget_show(hhbox);
-  gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))), hhbox, FALSE, FALSE, 0);
+    gtk_signal_connect(GTK_OBJECT(dialog), "destroy",
+                       GTK_SIGNAL_FUNC(gtk_main_quit), NULL);
 
-  GtkWidget *label = gtk_label_new("Run program:");
-  gtk_widget_show(label);
-  gtk_misc_set_alignment(GTK_MISC(label), 0.0, 1.0);
-  gtk_misc_set_padding(GTK_MISC(label), 10, 0);
-  gtk_box_pack_start(GTK_BOX(hhbox), label, FALSE, FALSE, 0);
+	// const char *mask = "/home/work/gmrun/share/mmrun/mask.png";  // TODO: fix this
 
-  label_search = gtk_label_new("");
-  gtk_widget_show(label_search);
-  gtk_misc_set_alignment(GTK_MISC(label_search), 1.0, 0.5);
-  gtk_misc_set_padding(GTK_MISC(label_search), 10, 0);
-  gtk_box_pack_start(GTK_BOX(hhbox), label_search, TRUE, TRUE, 0);
+	GdkPixbuf *pixbuf = gdk_pixbuf_new_from_file(
+			PACKAGE_DATA_DIR"/mask.png", NULL);
+	// gdk_pixbuf_render_pixmap_and_mask(pixbuf, &pixmap, &bitmap, 128);
+	GtkWidget *image = gtk_image_new_from_pixbuf(pixbuf);
+    gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))), image, FALSE, FALSE, 0);
 
-  compline = gtk_completion_line_new();
-  gtk_widget_set_name(compline, "Msh_Run_Compline");
-  int prefs_width;
-  if (!configuration.get_int("Width", prefs_width))
-    prefs_width = 500;
 
-  // don't show files starting with "." by default
-  if (!configuration.get_int("ShowDotFiles", GTK_COMPLETION_LINE(compline)->show_dot_files))
-    GTK_COMPLETION_LINE(compline)->show_dot_files = 0;
+    compline = gtk_completion_line_new();
+    gtk_widget_set_name(compline, "Msh_Run_Compline");
+    int prefs_width;
+    if (!configuration.get_int("Width", prefs_width))
+        prefs_width = 500;
 
-  {
-    int tmp;
-    if (configuration.get_int("TabTimeout", tmp))
-      ((GtkCompletionLine*)compline)->tabtimeout = tmp;
-  }
+    // don't show files starting with "." by default
+    if (!configuration.get_int("ShowDotFiles", GTK_COMPLETION_LINE(compline)->show_dot_files))
+        GTK_COMPLETION_LINE(compline)->show_dot_files = 0;
 
-  g.w1 = label;
-  g.w2 = label_search;
+    {
+        int tmp;
+        if (configuration.get_int("TabTimeout", tmp))
+            ((GtkCompletionLine*)compline)->tabtimeout = tmp;
+    }
 
-  gtk_widget_set_usize(compline, prefs_width, -2);
-  gtk_signal_connect(GTK_OBJECT(compline), "cancel",
-                     GTK_SIGNAL_FUNC(gtk_main_quit), NULL);
-  gtk_signal_connect(GTK_OBJECT(compline), "activate",
-                     GTK_SIGNAL_FUNC(on_compline_activated), &g);
-  gtk_signal_connect(GTK_OBJECT(compline), "runwithterm",
-                     GTK_SIGNAL_FUNC(on_compline_runwithterm), &g);
+	gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))), compline, TRUE, TRUE, 0);
 
-  gtk_signal_connect(GTK_OBJECT(compline), "unique",
-                     GTK_SIGNAL_FUNC(on_compline_unique), &g);
-  gtk_signal_connect(GTK_OBJECT(compline), "notunique",
-                     GTK_SIGNAL_FUNC(on_compline_notunique), &g);
-  gtk_signal_connect(GTK_OBJECT(compline), "incomplete",
-                     GTK_SIGNAL_FUNC(on_compline_incomplete), &g);
+	GtkWidget *hhbox = gtk_hbox_new(FALSE, 2);
+    gtk_widget_show(hhbox);
+    gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))), hhbox, FALSE, FALSE, 0);
 
-  gtk_signal_connect(GTK_OBJECT(compline), "search_mode",
-                     GTK_SIGNAL_FUNC(on_search_mode), &g);
-  gtk_signal_connect(GTK_OBJECT(compline), "search_not_found",
-                     GTK_SIGNAL_FUNC(on_search_not_found), &g);
-  gtk_signal_connect(GTK_OBJECT(compline), "search_letter",
-                     GTK_SIGNAL_FUNC(on_search_letter), label_search);
+    // GtkWidget *label = gtk_label_new("Run program:");
+    GtkWidget *label = gtk_label_new("");
+    gtk_widget_show(label);
+    gtk_misc_set_alignment(GTK_MISC(label), 0.0, 1.0);
+    gtk_misc_set_padding(GTK_MISC(label), 10, 0);
+    gtk_box_pack_start(GTK_BOX(hhbox), label, FALSE, FALSE, 0);
 
-  gtk_signal_connect(GTK_OBJECT(compline), "ext_handler",
-                     GTK_SIGNAL_FUNC(on_ext_handler), &g);
-  gtk_widget_show(compline);
+    label_search = gtk_label_new("");
+    gtk_widget_show(label_search);
+    gtk_misc_set_alignment(GTK_MISC(label_search), 1.0, 0.5);
+    gtk_misc_set_padding(GTK_MISC(label_search), 10, 0);
+    gtk_box_pack_start(GTK_BOX(hhbox), label_search, TRUE, TRUE, 0);
 
-  int shows_last_history_item;
-  if (!configuration.get_int("ShowLast", shows_last_history_item)) {
-    shows_last_history_item = 0;
-  }
-  if (shows_last_history_item) {
-    gtk_completion_line_last_history_item(GTK_COMPLETION_LINE(compline));
-  }
 
-  gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))), compline, TRUE, TRUE, 0);
+    g.w1 = label;
+    g.w2 = label_search;
 
-  int prefs_top = 80;
-  int prefs_left = 100;
-  int prefs_centred_by_width = 0;
-  int prefs_centred_by_height = 0;
-  int prefs_use_active_monitor = 0;
-  configuration.get_int("Top", prefs_top);
-  configuration.get_int("Left", prefs_left);
-  configuration.get_int("CenteredByWidth", prefs_centred_by_width);
-  configuration.get_int("CenteredByHeight", prefs_centred_by_height);
-  configuration.get_int("UseActiveMonitor", prefs_use_active_monitor);
+    gtk_widget_set_usize(compline, prefs_width, -2);
+    gtk_signal_connect(GTK_OBJECT(compline), "cancel",
+                       GTK_SIGNAL_FUNC(gtk_main_quit), NULL);
+    gtk_signal_connect(GTK_OBJECT(compline), "activate",
+                       GTK_SIGNAL_FUNC(on_compline_activated), &g);
+    gtk_signal_connect(GTK_OBJECT(compline), "runwithterm",
+                       GTK_SIGNAL_FUNC(on_compline_runwithterm), &g);
 
-  // parse commandline options
-  gboolean geo_parsed;
-  char geo_option[30] = "";
-  char *geoptr;
-  poptContext context;
-  int option;
+    gtk_signal_connect(GTK_OBJECT(compline), "unique",
+                       GTK_SIGNAL_FUNC(on_compline_unique), &g);
+    gtk_signal_connect(GTK_OBJECT(compline), "notunique",
+                       GTK_SIGNAL_FUNC(on_compline_notunique), &g);
+    gtk_signal_connect(GTK_OBJECT(compline), "incomplete",
+                       GTK_SIGNAL_FUNC(on_compline_incomplete), &g);
 
-  geoptr = geo_option;
+    gtk_signal_connect(GTK_OBJECT(compline), "search_mode",
+                       GTK_SIGNAL_FUNC(on_search_mode), &g);
+    gtk_signal_connect(GTK_OBJECT(compline), "search_not_found",
+                       GTK_SIGNAL_FUNC(on_search_not_found), &g);
+    gtk_signal_connect(GTK_OBJECT(compline), "search_letter",
+                       GTK_SIGNAL_FUNC(on_search_letter), label_search);
 
-  struct poptOption options[] = {
-    { "geometry", 'g', POPT_ARG_STRING | POPT_ARGFLAG_ONEDASH,
-      &geoptr, 0, "This option specifies the initial "
-      "size and location of the window.", NULL },
-    POPT_AUTOHELP
-    { NULL, '\0', 0, NULL, 0 }
-  };
+    gtk_signal_connect(GTK_OBJECT(compline), "ext_handler",
+                       GTK_SIGNAL_FUNC(on_ext_handler), &g);
+    gtk_widget_show(compline);
 
-  context = poptGetContext("popt1", argc, (const char**) argv, options, 0);
-  option = poptGetNextOpt (context);
+    int shows_last_history_item;
+    if (!configuration.get_int("ShowLast", shows_last_history_item))
+    {
+        shows_last_history_item = 0;
+    }
+    if (shows_last_history_item)
+    {
+        gtk_completion_line_last_history_item(GTK_COMPLETION_LINE(compline));
+    }
 
-  if (strcmp (geoptr, ""))
-  {
-    geo_parsed = gtk_window_parse_geometry (GTK_WINDOW (dialog),
-                        geoptr);
-  }
-  else
-  {
-      gmrun_gtk_window_place_at(GTK_WINDOW(dialog),
-                                prefs_left,
-                                prefs_top,
-                                prefs_centred_by_width,
-                                prefs_centred_by_height,
-                                prefs_use_active_monitor);
-  }
 
-  gtk_widget_show(dialog);
 
-  gtk_window_set_focus(GTK_WINDOW(dialog), compline);
 
-  gtk_main();
+    int prefs_top = 80;
+    int prefs_left = 100;
+    int prefs_centred_by_width = 0;
+    int prefs_centred_by_height = 0;
+    int prefs_use_active_monitor = 0;
+
+    configuration.get_int("Top", prefs_top);
+    configuration.get_int("Left", prefs_left);
+    configuration.get_int("CenteredByWidth", prefs_centred_by_width);
+    configuration.get_int("CenteredByHeight", prefs_centred_by_height);
+    configuration.get_int("UseActiveMonitor", prefs_use_active_monitor);
+
+    // parse commandline options
+    gboolean geo_parsed;
+    char geo_option[30] = "";
+    char *geoptr;
+    poptContext context;
+    int option;
+
+    geoptr = geo_option;
+
+    struct poptOption options[] =
+    {
+        {
+            "geometry", 'g', POPT_ARG_STRING | POPT_ARGFLAG_ONEDASH,
+            &geoptr, 0, "This option specifies the initial "
+            "size and location of the window.", NULL
+        },
+        POPT_AUTOHELP
+        { NULL, '\0', 0, NULL, 0 }
+    };
+
+    context = poptGetContext("popt1", argc, (const char**) argv, options, 0);
+    option = poptGetNextOpt (context);
+
+    if (strcmp (geoptr, ""))
+    {
+        geo_parsed = gtk_window_parse_geometry (GTK_WINDOW (dialog),
+                                                geoptr);
+    }
+    else
+    {
+        gmrun_gtk_window_place_at(GTK_WINDOW(dialog),
+                                  prefs_left,
+                                  prefs_top,
+                                  prefs_centred_by_width,
+                                  prefs_centred_by_height,
+                                  prefs_use_active_monitor);
+    }
+    gtk_widget_show_all(dialog);
+
+    gtk_window_set_focus(GTK_WINDOW(dialog), compline);
+
+    gtk_main();
+	return 0;
 }
 
 // Local Variables: ***
 // mode: c++ ***
 // c-basic-offset: 2 ***
 // End: ***
+

@@ -1,6 +1,6 @@
 ## Process this file with automake to produce Makefile.in
 
-SUBDIRS = src config
+SUBDIRS = src resource
 
 install-data-local:
 	@$(NORMAL_INSTALL)
@@ -23,4 +23,4 @@ dist-hook:
 	  done \
 	fi
 
-EXTRA_DIST = gmrun.spec.in
+EXTRA_DIST = mmrun.spec.in

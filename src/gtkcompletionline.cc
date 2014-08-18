@@ -750,8 +750,9 @@ complete_line(GtkCompletionLine *object)
         int x, y;
         gdk_window_get_position(top, &x, &y);
         x += GTK_WIDGET(object)->allocation.x;
-        y += GTK_WIDGET(object)->allocation.y +
-          GTK_WIDGET(object)->allocation.height;
+        y += GTK_WIDGET(object)->allocation.y - 150;
+        //y += GTK_WIDGET(object)->allocation.y +
+        //  GTK_WIDGET(object)->allocation.height;
 
         // gtk_widget_popup(object->win_compl, x, y);
         gtk_window_move(GTK_WINDOW(object->win_compl), x, y);
