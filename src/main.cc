@@ -18,6 +18,7 @@
 #include <cairo.h>
 
 #include <string>
+#include <cstring>
 #include <iostream>
 #include <sstream>
 #include <vector>

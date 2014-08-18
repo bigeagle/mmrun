@@ -7,6 +7,8 @@
 #define __CI_STRING_H__
 
 #include <string.h>
+#include <string>
+#include <cstring>
 #include <ctype.h>
 
 struct ci_char_traits : public std::char_traits<char>
