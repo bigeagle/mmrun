@@ -3,4 +3,4 @@
 resourcedir = @PACKAGE_DATA_DIR@
 resource_DATA = gmrunrc mask.png
 
-EXTRA_DIST = gmrunrc
+EXTRA_DIST = gmrunrc mask.png
